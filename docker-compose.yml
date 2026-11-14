@@ -1,0 +1,53 @@
+# Runs PostgreSQL 17 and MarksApi together.
+# Set required secrets via environment variables or a git-ignored .env file:
+#   docker compose up --build
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: marks-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-marks_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment or .env file}
+      POSTGRES_DB: ${POSTGRES_DB:-marks_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-marks_user} -d $${POSTGRES_DB:-marks_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  marks-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: marks-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5123:5123"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:5123
+      ConnectionStrings__Database: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-marks_db};Username=${POSTGRES_USER:-marks_user};Password=${POSTGRES_PASSWORD}"
+      Jwt__Key: "${JWT_KEY:?Set JWT_KEY (32+ chars) in your environment or .env file}"
+      Jwt__Issuer: "MarksApi"
+      Jwt__Audience: "MarksApiClients"
+      Jwt__LifetimeMinutes: "60"
+      DepartmentRules__PassMark: "50"
+      SeedUsers__TeacherUsername: "${SEED_TEACHER_USERNAME:-teacher1}"
+      SeedUsers__TeacherPassword: "${SEED_TEACHER_PASSWORD:?Set SEED_TEACHER_PASSWORD in your environment or .env file}"
+      SeedUsers__Student1Username: "${SEED_STUDENT1_USERNAME:-student1}"
+      SeedUsers__Student1Password: "${SEED_STUDENT1_PASSWORD:?Set SEED_STUDENT1_PASSWORD in your environment or .env file}"
+      SeedUsers__Student2Username: "${SEED_STUDENT2_USERNAME:-student2}"
+      SeedUsers__Student2Password: "${SEED_STUDENT2_PASSWORD:?Set SEED_STUDENT2_PASSWORD in your environment or .env file}"
+
+volumes:
+  pgdata:
+
